@@ -1,0 +1,49 @@
+# binaires
+*.pyc
+*.pyo
+
+# Fichier temporaires:
+.*.swp
+.*.swo
+*~
+\#*#
+
+# DB de dev
+*.db
+
+# restants de merge
+*.orig
+*.rej
+
+# Configuration du projet - par environnement
+conf.py
+django.wsgi
+
+# buildout
+.installed.cfg
+bin
+develop-eggs
+downloads
+eggs
+log
+parts
+tmp
+# mac
+.DS_Store
+
+/project/media/actualite
+/project/media/adminfiles
+/project/media/appel_offre
+/project/media/bourse
+/project/media/CACHE
+/project/media/cms_page_media
+/project/media/evenement
+/project/media/images
+/project/media/IMG2
+/project/media/partenaires
+/project/media/publication
+/project/media/slider
+/project/media/uploads
+/project/media/cms_page_media
+/project/whoosh
+/static
