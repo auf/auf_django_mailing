@@ -9,6 +9,20 @@ DATABASES = {
     }
 }
 
+#DATABASES = {
+#    'default': {
+#        'ENGINE': 'django.db.backends.mysql',
+#        'NAME': 'tests_mailing',
+#        'USER': 'ag',
+#        'PASSWORD': '2S6m9ziup2Xy',
+#        'HOST' : 'new-dev.auf',
+#        'HOST' : '/var/run/mysqld/mysqld-ram.sock',
+#        'USER': 'root',
+#        'HOST' : '127.0.0.1',
+#        'PORT' : '65432'
+#    }
+#}
+
 INSTALLED_APPS = (
     'django.contrib.sites',
     'django.contrib.contenttypes',

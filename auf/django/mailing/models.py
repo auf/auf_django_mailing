@@ -16,20 +16,20 @@ inclus automatiquement dans un réenvoi.
 
 Fonctionnement :
 ----------------
-* Définir un modèle de courriel, à l'aide du modèle ``ModeleCourriel``
-* Les instances du modèle ``Enveloppe`` représentent toutes les informations
-pour envoyer un courriel : elles ont besoin d'un ``ModeleCourriel``. Un identifiant
-unique est automatiquement généré, dans le champ ``jeton``.
+* Définir un modèle de courriel, à l'aide du modèle `ModeleCourriel`
+* Les instances du modèle `Enveloppe` représentent toutes les informations
+pour envoyer un courriel : elles ont besoin d'un `ModeleCourriel`. Un identifiant
+unique est automatiquement généré, dans le champ `jeton`.
 * Pour utiliser cette application, il faut définir son propre modèle pour pouvoir
 personnaliser le paramétrage des enveloppes, c'est-à-dire leur fournir l'adresse
 du destinataire et un contexte pour le rendu du corps du message. Cette classe
 doit :
-  - comporter deux méthodes, ``get_contexte_corps()`` et  ``get_adresse()``
-  - comporter une ForeignKey vers le modèle ``Enveloppe``, avec unique=True
+  - comporter deux méthodes, `get_contexte_corps()` et  `get_adresse()`
+  - comporter une ForeignKey vers le modèle `Enveloppe`, avec unique=True
   - elle doit être déclarée dans les settings dans le paramètre
-  ``MAILING_MODELE_PARAMS_ENVELOPPE`` sous le format 'nom_application.nom_modele'
+  `MAILING_MODELE_PARAMS_ENVELOPPE` sous le format 'nom_application.nom_modele'
 * L'envoi est temporisé, d'un nombre de secondes indiqué dans le paramètre
-``MAILING_TEMPORISATION``. Défaut: 2 secondes
+`MAILING_TEMPORISATION`. Défaut: 2 secondes
 
 """
 import random
@@ -48,6 +48,10 @@ from django.template.context import Context
 from django.conf import settings
 
 class ModeleCourriel(models.Model):
+    """
+    Représente un modèle de courriel. Le corps sera interprété comme un template
+    django
+    """
     code = CharField(max_length=8, unique=True)
     sujet = CharField(max_length=256)
     corps = TextField()
@@ -79,13 +83,13 @@ class Enveloppe(models.Model):
         """
         Retourne les paramètres associés à cette enveloppe.
         Le mécanisme est copié sur celui des profils utilisateurs
-        (cf. django.contrib.auth.User.get_profile) et permet à chaque site
+        (cf. `django.contrib.auth.User.get_profile`) et permet à chaque site
         de définir l'adresse d'envoi et le contexte de rendu du template
         selon ses propres besoins.
 
         On s'attend à ce que la classe soit indiquée au format 'application.model'
         dans le setting MODELE_PARAMS_ENVELOPPE, et que cette classe ait une
-        ForeignKey vers Enveloppe, avec unique=True
+        ForeignKey vers `Enveloppe`, avec unique=True
 
         Voir aussi l'article de James Bennett à l'adresse :
         http://www.b-list.org/weblog/2006/jun/06/django-tips-extending-user-model/
