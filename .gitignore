@@ -1,5 +1,8 @@
-# binaires
+*egg-info
 *.pyc
+build
+dist
+
 *.pyo
 
 # Fichier temporaires:
