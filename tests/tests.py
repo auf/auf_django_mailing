@@ -8,7 +8,7 @@ from django.db.models.fields.related import ForeignKey
 from django.test import TestCase
 
 from auf.django.mailing.models import EntreeLog, Enveloppe, envoyer,\
-    ModeleCourriel
+    ModeleCourriel, generer_jeton, TAILLE_JETON
 
 class TestDestinataire(models.Model):
     adresse_courriel = CharField(max_length=128)
@@ -16,16 +16,22 @@ class TestDestinataire(models.Model):
 
 
 class TestEnveloppeParams(models.Model):
-
     destinataire = ForeignKey(TestDestinataire)
     enveloppe = ForeignKey(Enveloppe, unique=True)
+    jeton = CharField(max_length=TAILLE_JETON)
+
+    def save(self, *args, **kwargs):
+        if not self.jeton:
+            self.jeton = generer_jeton(TAILLE_JETON)
+        super(TestEnveloppeParams, self).save(*args, **kwargs)
 
     def get_adresse(self):
         return self.destinataire.adresse_courriel
 
     def get_corps_context(self):
         context = {
-            'nom_destinataire' : self.destinataire.nom
+            'nom_destinataire' : self.destinataire.nom,
+            'jeton': self.jeton,
         }
         return context
 
@@ -62,7 +68,7 @@ class MailTest(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].body, self.dest1.nom +
-            'http://example.com/acces/' + enveloppe.jeton)
+            'http://example.com/acces/' + enveloppe_params.jeton)
         self.assertEqual(mail.outbox[0].to, [self.dest1.adresse_courriel])
 
         entrees_log = EntreeLog.objects.all()

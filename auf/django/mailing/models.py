@@ -18,8 +18,7 @@ Fonctionnement :
 ----------------
 * Définir un modèle de courriel, à l'aide du modèle `ModeleCourriel`
 * Les instances du modèle `Enveloppe` représentent toutes les informations
-pour envoyer un courriel : elles ont besoin d'un `ModeleCourriel`. Un identifiant
-unique est automatiquement généré, dans le champ `jeton`.
+pour envoyer un courriel : elles ont besoin d'un `ModeleCourriel`.
 * Pour utiliser cette application, il faut définir son propre modèle pour pouvoir
 personnaliser le paramétrage des enveloppes, c'est-à-dire leur fournir l'adresse
 du destinataire et un contexte pour le rendu du corps du message. Cette classe
@@ -60,6 +59,10 @@ class ModeleCourriel(models.Model):
 
 TAILLE_JETON = 32
 
+def generer_jeton(taille=TAILLE_JETON):
+    return ''.join(random.choice(string.letters + string.digits)\
+        for i in xrange(TAILLE_JETON))
+
 
 class EnveloppeParametersNotAvailable(Exception):
     pass
@@ -70,14 +73,6 @@ class Enveloppe(models.Model):
     Représente un envoi à faire, avec toutes les informations nécessaires.
     """
     modele = ForeignKey(ModeleCourriel)
-    jeton = CharField(max_length=128, unique=True)
-
-    def save(self, *args, **kwargs):
-        if not self.jeton:
-            self.jeton = ''.join(random.choice(string.letters + string.digits)\
-                for i in xrange(TAILLE_JETON))
-
-        super(Enveloppe, self).save(*args, **kwargs)
 
     def get_params(self):
         """
@@ -114,7 +109,6 @@ class Enveloppe(models.Model):
 
     def get_corps_context(self):
         context = self.get_params().get_corps_context()
-        context['jeton'] = self.jeton
         return context
 
     def get_adresse(self):
@@ -129,11 +123,8 @@ class EntreeLog(models.Model):
 @transaction.commit_manually
 def envoyer(code_modele, adresse_expediteur, site=None, url_name=None):
     modele = ModeleCourriel.objects.get(code=code_modele)
-
     enveloppes = Enveloppe.objects.filter(modele=modele)
-
     temporisation = getattr(settings, 'MAILING_TEMPORISATION', 2)
-
     try:
         for enveloppe in enveloppes:
             # on vérifie qu'on n'a pas déjà envoyé ce courriel à
@@ -147,9 +138,10 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None):
             modele_corps = Template(enveloppe.modele.corps)
             contexte_corps = enveloppe.get_corps_context()
 
-            if site and url_name:
+            if site and url_name and 'jeton' in contexte_corps:
                 url = 'http://%s%s' % (site.domain,
-                                       reverse(url_name, kwargs={'jeton': enveloppe.jeton}))
+                                    reverse(url_name,
+                                        kwargs={'jeton': contexte_corps['jeton']}))
                 contexte_corps['url'] = url
 
             corps = modele_corps.render(Context(contexte_corps))
