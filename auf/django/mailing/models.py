@@ -55,6 +55,9 @@ class ModeleCourriel(models.Model):
     sujet = CharField(max_length=256)
     corps = TextField()
     html = BooleanField(verbose_name=u"Le corps est au format HTML")
+    
+    def __unicode__(self):
+        return self.code + u" / " + self.sujet
 
 
 TAILLE_JETON = 32
@@ -121,17 +124,38 @@ class EntreeLog(models.Model):
     erreur = TextField(null=True)
 
 @transaction.commit_manually
-def envoyer(code_modele, adresse_expediteur, site=None, url_name=None):
+def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
+            limit=None, retry_errors=True):
+    u"""
+    Cette fonction procède à l'envoi proprement dit, pour toutes les enveloppes
+    du modele ayant pour code :code_modele. Si ``site``, ``url_name`` sont spécifiés
+    et que les enveloppes passent un paramètre ``jeton`` dans leur contexte,
+    une url sera générée et passée comme variable au template.
+    :param code_modele: le code du modèle pour lequel faire l'envoi
+    :param adresse_expediteur:
+    :param site: une instance de django.contrib.sites (pour la génération de l'URL)
+    :param url_name: le nom de l'URL à générer
+    :param limit: indique un nombre maximal de courriels à envoyer pour cet appel
+    :param retry_errors: les envois en erreur doivent-ils être retentés ou non ?
+
+    .. warning:: L'utilisation conjointe d'une limite (paramètre ``limit``) et
+     de ``retry_errors`` pourrait faire en sorte que certains courriels ne soient
+     jamais envoyés (si il y a plus de courriels en erreur que ``limit``)
+    """
     modele = ModeleCourriel.objects.get(code=code_modele)
     enveloppes = Enveloppe.objects.filter(modele=modele)
     temporisation = getattr(settings, 'MAILING_TEMPORISATION', 2)
+    counter = 0
     try:
         for enveloppe in enveloppes:
             # on vérifie qu'on n'a pas déjà envoyé ce courriel à
             # cet établissement et à cette adresse
             adresse_envoi = enveloppe.get_adresse()
             entree_log = EntreeLog.objects.filter(enveloppe=enveloppe,
-                erreur__isnull=True, adresse=adresse_envoi)
+                adresse=adresse_envoi)
+            if retry_errors:
+                entree_log = entree_log.filter(erreur__isnull=True)
+
             if entree_log.count() > 0:
                 continue
 
@@ -164,11 +188,14 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None):
                 entree_log.enveloppe = enveloppe
                 entree_log.adresse = adresse_envoi
                 message.send()
+                counter += 1
                 time.sleep(temporisation)
             except smtplib.SMTPException as e:
                 entree_log.erreur = e.__str__()
             entree_log.save()
             transaction.commit()
+            if limit and counter >= limit:
+                break
     except:
         transaction.rollback()
         raise

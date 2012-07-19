@@ -49,20 +49,21 @@ class MailTest(TestCase):
             sujet='sujet_modele',  corps='{{ nom_destinataire }}{{ url }}',
             html=False)
         self.modele_courriel.save()
+        mail.outbox = []
 
     def get_site(self):
         return Site.objects.all()[0]
 
-    def create_enveloppe_params(self):
+    def create_enveloppe_params(self, dest):
         enveloppe = Enveloppe(modele=self.modele_courriel)
         enveloppe.save()
-        enveloppe_params = TestEnveloppeParams(enveloppe=enveloppe, destinataire=self.dest1)
+        enveloppe_params = TestEnveloppeParams(enveloppe=enveloppe, destinataire=dest)
         enveloppe_params.save()
         return enveloppe, enveloppe_params
 
 
     def test_envoi_simple(self):
-        enveloppe, enveloppe_params = self.create_enveloppe_params()
+        enveloppe, enveloppe_params = self.create_enveloppe_params(self.dest1)
 
         envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy')
 
@@ -91,16 +92,33 @@ class MailTest(TestCase):
         entrees_log = EntreeLog.objects.all()
         self.assertEqual(len(entrees_log), 2)
 
+        # mais pas si on demande que les erreurs ne soient pas retentées
+        EntreeLog.objects.all()[1].delete()
+        envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy', retry_errors=False)
+        self.assertEqual(len(mail.outbox), 2)
+        entrees_log = EntreeLog.objects.all()
+        self.assertEqual(len(entrees_log), 1)
+
         entrees_log[0].delete()
 
         # le courriel devrait également être renvoyé si l'adresse du destinataire
         # a changé
+        envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy', retry_errors=False)
         self.dest1.adresse_courriel = 'autre_adresse@test.org'
         self.dest1.save()
         envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy')
-        self.assertEqual(len(mail.outbox), 3)
+        self.assertEqual(len(mail.outbox), 4)
         entrees_log = EntreeLog.objects.all()
         self.assertEqual(len(entrees_log), 2)
+
+    def test_limit(self):
+        self.create_enveloppe_params(self.dest1)
+        self.create_enveloppe_params(self.dest2)
+        envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy', limit=1, retry_errors=False)
+        self.assertEqual(len(mail.outbox), 1)
+        envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy', limit=1, retry_errors=False)
+        self.assertEqual(len(mail.outbox), 2)
+
 
 
 

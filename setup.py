@@ -3,7 +3,7 @@
 from setuptools import setup, find_packages
 
 name = 'auf.django.mailing'
-version = '0.3'
+version = '0.4'
 
 setup(
     name=name,
