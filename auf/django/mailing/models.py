@@ -178,11 +178,11 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
             try:
                 # Attention en DEV, devrait simplement écrire le courriel
                 # dans la console, cf. paramètre EMAIL_BACKEND dans conf.py
-                # En PROD, supprimer EMAIL_BACKEND (ce qui fera retomber sur le défaut
-                # qui est d'envoyer par SMTP). Même chose en TEST, mais attention
-                # car les adresses qui sont dans la base seront utilisées:
-                # modifier les données pour y mettre des adresses de test plutôt que
-                # les vraies
+                # En PROD, supprimer EMAIL_BACKEND (ce qui fera retomber sur
+                # le défaut qui est d'envoyer par SMTP). Même chose en TEST,
+                # mais attention car les adresses qui sont dans la base
+                # seront utilisées: modifier les données pour y mettre des
+                # adresses de test plutôt que les vraies
                 message.content_subtype = "html" if enveloppe.modele.html else "text"
                 entree_log = EntreeLog()
                 entree_log.enveloppe = enveloppe
@@ -190,7 +190,7 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
                 message.send()
                 counter += 1
                 time.sleep(temporisation)
-            except smtplib.SMTPException as e:
+            except (smtplib.socket.error, smtplib.SMTPException) as e:
                 entree_log.erreur = e.__str__()
             entree_log.save()
             transaction.commit()
