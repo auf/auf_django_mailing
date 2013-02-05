@@ -1,3 +1,8 @@
+0.5
+---
+
+* Ne pas lancer d'exception lorsque le serveur ne répond pas.
+
 0.3
 ---
 
