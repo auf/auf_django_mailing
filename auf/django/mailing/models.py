@@ -35,10 +35,16 @@ import random
 import smtplib
 import string
 import time
+from distutils import version
+import django
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail.message import EmailMessage
 from django.core.urlresolvers import reverse
 from django.db import models, transaction
+try:
+    from django.models import get_model
+except ImportError:
+    from django.apps import apps
 from django.db.models.fields import CharField, TextField, BooleanField, DateTimeField
 from django.db.models.fields.related import ForeignKey
 import datetime
@@ -100,7 +106,10 @@ class Enveloppe(models.Model):
             except ValueError:
                 raise EnveloppeParametersNotAvailable()
             try:
-                model = models.get_model(app_label, model_name)
+                if hasattr(models, 'get_model'):  # django < 1.7
+                    model = get_model(app_label, model_name)
+                else:
+                    model = apps.get_model(app_label, model_name)
                 if model is None:
                     raise EnveloppeParametersNotAvailable()
                 self._params_cache = model._default_manager.using(
@@ -123,7 +132,7 @@ class EntreeLog(models.Model):
     date_heure_envoi = DateTimeField(default=datetime.datetime.now)
     erreur = TextField(null=True)
 
-@transaction.commit_manually
+
 def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
             limit=None, retry_errors=True):
     u"""
@@ -146,59 +155,79 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
     enveloppes = Enveloppe.objects.filter(modele=modele)
     temporisation = getattr(settings, 'MAILING_TEMPORISATION', 2)
     counter = 0
-    try:
-        for enveloppe in enveloppes:
-            # on vérifie qu'on n'a pas déjà envoyé ce courriel à
-            # cet établissement et à cette adresse
-            adresse_envoi = enveloppe.get_adresse()
-            entree_log = EntreeLog.objects.filter(enveloppe=enveloppe,
-                adresse=adresse_envoi)
-            if retry_errors:
-                entree_log = entree_log.filter(erreur__isnull=True)
+    for enveloppe in enveloppes:
+        # on vérifie qu'on n'a pas déjà envoyé ce courriel à
+        # cet établissement et à cette adresse
+        adresse_envoi = enveloppe.get_adresse()
+        entree_log = EntreeLog.objects.filter(enveloppe=enveloppe,
+                                              adresse=adresse_envoi)
+        if retry_errors:
+            entree_log = entree_log.filter(erreur__isnull=True)
 
-            if entree_log.count() > 0:
-                continue
+        if entree_log.count() > 0:
+            continue
 
-            modele_corps = Template(enveloppe.modele.corps)
-            contexte_corps = enveloppe.get_corps_context()
+        modele_corps = Template(enveloppe.modele.corps)
+        contexte_corps = enveloppe.get_corps_context()
 
-            if site and url_name and 'jeton' in contexte_corps:
-                url = 'http://%s%s' % (site.domain,
-                                    reverse(url_name,
-                                        kwargs={'jeton': contexte_corps['jeton']}))
-                contexte_corps['url'] = url
+        if site and url_name and 'jeton' in contexte_corps:
+            url = 'http://%s%s' % (
+                site.domain,
+                reverse(url_name,
+                        kwargs={'jeton': contexte_corps['jeton']}))
+            contexte_corps['url'] = url
 
-            corps = modele_corps.render(Context(contexte_corps))
-            message = EmailMessage(enveloppe.modele.sujet,
-                corps,
-                adresse_expediteur,     # adresse de retour
-                [adresse_envoi],                # adresse du destinataire
-                headers={'precedence' : 'bulk'} # selon les conseils de google
-            )
+        corps = modele_corps.render(Context(contexte_corps))
+        message = EmailMessage(enveloppe.modele.sujet,
+                               corps,
+                               adresse_expediteur,  # adresse de retour
+                               [adresse_envoi],  # adresse du destinataire
+                               headers={'precedence': 'bulk'}
+                               # selon les conseils de google
+                               )
+        envoyer_message(adresse_envoi, enveloppe, message)
+        counter += 1
+        time.sleep(temporisation)
+        if limit and counter >= limit:
+            break
+
+
+def get_envoyer_message():
+    django_version = django.get_version()
+    if version.StrictVersion(django_version) < version.StrictVersion('1.6'):
+
+        def envoyer_msg(adresse_envoi, enveloppe, message):
             try:
-                # Attention en DEV, devrait simplement écrire le courriel
-                # dans la console, cf. paramètre EMAIL_BACKEND dans conf.py
-                # En PROD, supprimer EMAIL_BACKEND (ce qui fera retomber sur
-                # le défaut qui est d'envoyer par SMTP). Même chose en TEST,
-                # mais attention car les adresses qui sont dans la base
-                # seront utilisées: modifier les données pour y mettre des
-                # adresses de test plutôt que les vraies
-                message.content_subtype = "html" if enveloppe.modele.html else "text"
-                entree_log = EntreeLog()
-                entree_log.enveloppe = enveloppe
-                entree_log.adresse = adresse_envoi
-                message.send()
-                counter += 1
-                time.sleep(temporisation)
-            except (smtplib.socket.error, smtplib.SMTPException) as e:
-                entree_log.erreur = e.__str__()
-            entree_log.save()
-            transaction.commit()
-            if limit and counter >= limit:
-                break
-    except:
-        transaction.rollback()
-        raise
+                envoyer_message(adresse_envoi, enveloppe, message)
+            except:
+                transaction.rollback()
+                raise
 
-    transaction.commit() # nécessaire dans le cas où rien n'est envoyé, à cause du décorateur commit_manually
+        envoyer_msg = transaction.commit_manually(envoyer_msg)
+    else:
+
+        def envoyer_msg(adresse_envoi, enveloppe, message):
+            with transaction.atomic():
+                envoyer_message(adresse_envoi, enveloppe, message)
+    return envoyer_msg
+
+
+def envoyer_message(adresse_envoi, enveloppe, message):
+    message.content_subtype = "html" if enveloppe.modele.html else "text"
+    new_entree_log = EntreeLog()
+    new_entree_log.enveloppe = enveloppe
+    new_entree_log.adresse = adresse_envoi
+    try:
+        # Attention en DEV, devrait simplement écrire le courriel
+        # dans la console, cf. paramètre EMAIL_BACKEND dans conf.py
+        # En PROD, supprimer EMAIL_BACKEND (ce qui fera retomber sur
+        # le défaut qui est d'envoyer par SMTP). Même chose en TEST,
+        # mais attention car les adresses qui sont dans la base
+        # seront utilisées: modifier les données pour y mettre des
+        # adresses de test plutôt que les vraies
+        message.send()
+    except (smtplib.socket.error, smtplib.SMTPException) as e:
+        new_entree_log.erreur = e.__str__()
+    new_entree_log.save()
+
 
