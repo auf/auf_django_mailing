@@ -106,9 +106,9 @@ class Enveloppe(models.Model):
             except ValueError:
                 raise EnveloppeParametersNotAvailable()
             try:
-                if hasattr(models, 'get_model'):  # django < 1.7
+                try:  # django < 1.7
                     model = get_model(app_label, model_name)
-                else:
+                except NameError:
                     model = apps.get_model(app_label, model_name)
                 if model is None:
                     raise EnveloppeParametersNotAvailable()
