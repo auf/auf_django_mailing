@@ -36,6 +36,11 @@ class TestEnveloppeParams(models.Model):
         return context
 
 
+def get_adresse_expediteur(self):
+    if self.destinataire.nom == 'john':
+        return 'ami.de.john@test.org'
+
+
 class MailTest(TestCase):
 
     def setUp(self):
@@ -51,6 +56,10 @@ class MailTest(TestCase):
         self.modele_courriel.save()
         mail.outbox = []
 
+        self.dest_john = TestDestinataire.objects.create(
+            adresse_courriel='john@beatles.org',
+            nom='john')
+
     def get_site(self):
         return Site.objects.all()[0]
 
@@ -61,6 +70,14 @@ class MailTest(TestCase):
         enveloppe_params.save()
         return enveloppe, enveloppe_params
 
+    def test_adresse_expediteur_enveloppe(self):
+        enveloppe, _ = self.create_enveloppe_params(self.dest_john)
+        assert enveloppe.get_adresse_expediteur() is None
+        try:
+            TestEnveloppeParams.get_adresse_expediteur = get_adresse_expediteur
+            assert enveloppe.get_adresse_expediteur() == 'ami.de.john@test.org'
+        finally:
+            del TestEnveloppeParams.get_adresse_expediteur
 
     def test_envoi_simple(self):
         enveloppe, enveloppe_params = self.create_enveloppe_params(self.dest1)
@@ -118,6 +135,16 @@ class MailTest(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         envoyer(self.modele_courriel.code, 'expediteur@test.org', self.get_site(), 'dummy', limit=1, retry_errors=False)
         self.assertEqual(len(mail.outbox), 2)
+
+    def test_envoi_adresse_expediteur_differente(self):
+        enveloppe, _ = self.create_enveloppe_params(self.dest_john)
+        try:
+            TestEnveloppeParams.get_adresse_expediteur = get_adresse_expediteur
+            envoyer(self.modele_courriel.code, 'expediteur@test.org',
+                    self.get_site(), 'dummy')
+            assert mail.outbox[-1].from_email == 'ami.de.john@test.org'
+        finally:
+            del TestEnveloppeParams.get_adresse_expediteur
 
 
 

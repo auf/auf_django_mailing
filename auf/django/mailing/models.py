@@ -126,6 +126,12 @@ class Enveloppe(models.Model):
     def get_adresse(self):
         return self.get_params().get_adresse()
 
+    def get_adresse_expediteur(self):
+        params = self.get_params()
+        if hasattr(params, 'get_adresse_expediteur'):
+            return params.get_adresse_expediteur()
+
+
 class EntreeLog(models.Model):
     enveloppe = ForeignKey(Enveloppe)
     adresse = CharField(max_length=256)
@@ -176,6 +182,9 @@ def envoyer(code_modele, adresse_expediteur, site=None, url_name=None,
                 reverse(url_name,
                         kwargs={'jeton': contexte_corps['jeton']}))
             contexte_corps['url'] = url
+
+        adresse_expediteur_env = enveloppe.get_adresse_expediteur()
+        adresse_expediteur = adresse_expediteur_env or adresse_expediteur
 
         corps = modele_corps.render(Context(contexte_corps))
         message = EmailMessage(enveloppe.modele.sujet,
